@@ -29,7 +29,7 @@ use std::thread;
 
 pub const MAX_PLY: i32 = 128;
 const MAX_MOVES: usize = 256;
-const INFINITY: i32 = 30000;
+const INFINITY: i32 = 32000;
 const MATE_SCORE: i32 = MATE_VALUE - MAX_PLY;
 const DRAW_SCORE: i32 = 0;
 
@@ -272,21 +272,77 @@ fn find_least_attacker(pos: &Position, attackers: u64, color: Color) -> (u8, i32
 fn update_xray_attackers(pos: &Position, target: u8, mut occupied: u64, removed_square: u8) -> u64 {
     let (removed_piece, _) = pos.piece_at(removed_square);
     
+    // X-ray saldırganları bul
     match removed_piece {
         PieceType::Bishop | PieceType::Queen => {
-            let diagonal_attackers = get_bishop_attacks(target, occupied) & 
-                (pos.pieces_of_type(PieceType::Bishop) | pos.pieces_of_type(PieceType::Queen));
-            occupied |= diagonal_attackers;
+            // Removed square'den target'a doğru yönü bul
+            let direction = get_line_direction(removed_square, target);
+            if direction.0 != 0 || direction.1 != 0 { // Diagonal
+                let behind_attackers = get_xray_attackers_on_line(pos, removed_square, target, occupied, true);
+                occupied |= behind_attackers;
+            }
         }
-        PieceType::Rook | PieceType::Queen => {
-            let line_attackers = get_rook_attacks(target, occupied) & 
+        PieceType::Rook => {
+            let direction = get_line_direction(removed_square, target);
+            if (direction.0 == 0) != (direction.1 == 0) { // Straight line
+                let behind_attackers = get_xray_attackers_on_line(pos, removed_square, target, occupied, false);
+                occupied |= behind_attackers;
+            }
+        }
+        PieceType::Queen if removed_piece == PieceType::Queen => {
+            // Queen için hem diagonal hem straight kontrol et
+            let behind_diagonal = get_bishop_attacks(target, occupied) & 
+                (pos.pieces_of_type(PieceType::Bishop) | pos.pieces_of_type(PieceType::Queen));
+            let behind_straight = get_rook_attacks(target, occupied) & 
                 (pos.pieces_of_type(PieceType::Rook) | pos.pieces_of_type(PieceType::Queen));
-            occupied |= line_attackers;
+            occupied |= behind_diagonal | behind_straight;
         }
         _ => {}
     }
     
     occupied
+}
+
+// Yardımcı fonksiyon ekle
+fn get_xray_attackers_on_line(pos: &Position, from: u8, to: u8, occupied: u64, is_diagonal: bool) -> u64 {
+    let mut result = 0u64;
+    let direction = get_line_direction(from, to);
+    
+    let mut current = from as i8;
+    loop {
+        current -= direction.0 * 8 + direction.1;
+        if current < 0 || current >= 64 {
+            break;
+        }
+        
+        let sq = current as u8;
+        if occupied & (1u64 << sq) != 0 {
+            let (piece, _) = pos.piece_at(sq);
+            if is_diagonal && (piece == PieceType::Bishop || piece == PieceType::Queen) {
+                result |= 1u64 << sq;
+            } else if !is_diagonal && (piece == PieceType::Rook || piece == PieceType::Queen) {
+                result |= 1u64 << sq;
+            }
+            break;
+        }
+    }
+    
+    result
+}
+
+fn get_line_direction(from: u8, to: u8) -> (i8, i8) {
+    let from_rank = (from / 8) as i8;
+    let from_file = (from % 8) as i8;
+    let to_rank = (to / 8) as i8;
+    let to_file = (to % 8) as i8;
+    
+    let rank_diff = to_rank - from_rank;
+    let file_diff = to_file - from_file;
+    
+    (
+        if rank_diff == 0 { 0 } else { rank_diff / rank_diff.abs() },
+        if file_diff == 0 { 0 } else { file_diff / file_diff.abs() }
+    )
 }
 
 struct MoveOrder {
@@ -557,7 +613,7 @@ impl SearchContext {
         if !is_pv && !in_check && !root_node {
             let is_tactical = is_tactical_position(pos);
             
-            if depth <= 6 && !is_tactical {
+            if depth <= 5 && !is_tactical {
                 if let Some(score) = reverse_futility_pruning(pos, depth, beta, static_eval, improving) {
                     self.pruning_stats.record_prune(PruningReason::ReverseFutility);
                     return score;
@@ -1255,11 +1311,13 @@ impl ParallelSearch {
     
     fn send_uci_info(&self, depth: i32, score: i32, nodes: u64, time_ms: u64, nps: u64, pv: &[Move], currmovenumber: u32) {
         let score_str = if score.abs() >= MATE_SCORE {
-            let mate_in = (MATE_VALUE - score.abs() + 1) / 2;
-            format!("mate {}", if score > 0 { mate_in } else { -mate_in })
-        } else {
-            format!("cp {}", score)
-        };
+        let mut mate_in = (MATE_VALUE - score.abs() + 1) / 2;
+        // Adjust for ply count to show correct mate distance
+        //mate_in = (mate_in + 1) / 2; // Convert from plies to moves
+        format!("mate {}", if score > 0 { mate_in } else { -mate_in })
+    } else {
+        format!("cp {}", score)
+    };
         
         let pv_str = pv.iter()
             .map(|&mv| move_to_uci(mv))
