@@ -62,6 +62,7 @@ const ATTACK_UNITS: [i32; 7] = [
 pub fn evaluate_king_safety(pos: &Position) -> Score {
     let white_safety = evaluate_king_safety_for_color(pos, Color::White);
     let black_safety = evaluate_king_safety_for_color(pos, Color::Black);
+
     
     let result = white_safety.sub(black_safety);
     
@@ -208,7 +209,7 @@ fn calculate_king_zone(king_sq: u8) -> Bitboard {
 fn flip_square_for_color(square: u8, color: Color) -> u8 {
     match color {
         Color::White => square,
-        Color::Black => 63 - square,
+        Color::Black => square ^ 56,  // Dikey flip (rank'leri ters çevir)
     }
 }
 
@@ -216,16 +217,7 @@ fn flip_square_for_color(square: u8, color: Color) -> u8 {
 pub fn flip_bitboard_for_color(bb: Bitboard, color: Color) -> Bitboard {
     match color {
         Color::White => bb,
-        Color::Black => {
-            let mut flipped = 0u64;
-            let mut temp_bb = bb;
-            while temp_bb != 0 {
-                let sq = temp_bb.trailing_zeros() as u8;
-                temp_bb &= temp_bb - 1;
-                flipped |= 1u64 << (63 - sq);
-            }
-            flipped
-        }
+        Color::Black => bb.swap_bytes(),
     }
 }
 
