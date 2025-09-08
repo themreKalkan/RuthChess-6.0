@@ -1,4 +1,4 @@
-# RuthChess-6.0
+# RuthChess
 
 **A UCI chess engine written in Rust with OVI move generation**
 
