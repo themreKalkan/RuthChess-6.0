@@ -14,6 +14,7 @@ use crate::{
         time_management::TimeManager,
         transposition::TranspositionTable,
     },
+    eval::weights,
 };
 
 use std::io::{self, BufRead, Write};
@@ -24,7 +25,7 @@ use std::time::{Duration, Instant};
 
 const ENGINE_NAME: &str = "RuthChess";
 const ENGINE_AUTHOR: &str = "EmreKalkan";
-const ENGINE_VERSION: &str = "6.0";
+const ENGINE_VERSION: &str = "7.0";
 const DEFAULT_TT_SIZE_MB: usize = 256;
 const MIN_TT_SIZE_MB: usize = 1;
 const MAX_TT_SIZE_MB: usize = 32768;
@@ -134,6 +135,21 @@ impl ImprovedUciEngine {
         println!("option name Move Overhead type spin default 50 min 0 max 5000");
         println!("option name Clear Hash type button");
         
+        println!("option name EvalMaterial type spin default 100 min 0 max 200");
+        println!("option name EvalPST type spin default 100 min 0 max 200");
+        println!("option name EvalPawns type spin default 100 min 0 max 200");
+        println!("option name EvalMobility type spin default 100 min 0 max 200");
+        println!("option name EvalKingSafety type spin default 100 min 0 max 200");
+        println!("option name EvalThreats type spin default 100 min 0 max 200");
+        println!("option name EvalSpace type spin default 100 min 0 max 200");
+        println!("option name EvalImbalance type spin default 100 min 0 max 200");
+        println!("option name EvalBishopPair type spin default 100 min 0 max 200");
+        println!("option name EvalPassedPawn type spin default 120 min 0 max 200");
+        println!("option name EvalTempo type spin default 100 min 0 max 200");
+        println!("option name ResetWeights type button");
+        println!("option name SaveWeights type button");
+        println!("option name LoadWeights type button");
+        
         println!("uciok");
     }
 
@@ -217,6 +233,95 @@ impl ImprovedUciEngine {
                 let mut search = self.parallel_search.lock().unwrap();
                 search.clear_hash();
                 self.debug("Hash table cleared");
+            }
+            "EvalMaterial" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.material_weight = weight);
+                    self.debug(&format!("Material weight set to {:.2}", weight));
+                }
+            }
+            "EvalPST" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.pst_weight = weight);
+                    self.debug(&format!("PST weight set to {:.2}", weight));
+                }
+            }
+            "EvalPawns" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.pawn_structure_weight = weight);
+                    self.debug(&format!("Pawn structure weight set to {:.2}", weight));
+                }
+            }
+            "EvalMobility" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.mobility_weight = weight);
+                    self.debug(&format!("Mobility weight set to {:.2}", weight));
+                }
+            }
+            "EvalKingSafety" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.king_safety_weight = weight);
+                    self.debug(&format!("King safety weight set to {:.2}", weight));
+                }
+            }
+            "EvalThreats" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.threats_weight = weight);
+                    self.debug(&format!("Threats weight set to {:.2}", weight));
+                }
+            }
+            "EvalSpace" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.space_weight = weight);
+                    self.debug(&format!("Space weight set to {:.2}", weight));
+                }
+            }
+            "EvalImbalance" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.imbalance_weight = weight);
+                    self.debug(&format!("Imbalance weight set to {:.2}", weight));
+                }
+            }
+            "EvalBishopPair" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.bishop_pair_weight = weight);
+                    self.debug(&format!("Bishop pair weight set to {:.2}", weight));
+                }
+            }
+            "EvalPassedPawn" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.passed_pawn_weight = weight);
+                    self.debug(&format!("Passed pawn weight set to {:.2}", weight));
+                }
+            }
+            "EvalTempo" => {
+                if let Ok(value) = option_value.parse::<u32>() {
+                    let weight = value as f32 / 100.0;
+                    weights::update_weight(|w| w.tempo_bonus_weight = weight);
+                    self.debug(&format!("Tempo bonus weight set to {:.2}", weight));
+                }
+            }
+            "ResetWeights" => {
+                weights::reset_weights();
+                self.debug("All weights reset to defaults");
+            }
+            "SaveWeights" => {
+                let weights_str = weights::weights_to_string(&weights::get_weights());
+                println!("info string Current weights:\n{}", weights_str);
+                self.debug("Weights displayed");
+            }
+            "LoadWeights" => {
+                self.debug("Load weights from file not implemented yet");
             }
             _ => {
                 self.debug(&format!("Unknown option: {}", option_name));
@@ -433,14 +538,30 @@ impl ImprovedUciEngine {
 
     fn eval_command(&self) {
         if let Ok(pos) = self.position.read() {
+            let current_weights = weights::get_weights();
+            println!("\n=== Current Weights ===");
+            println!("Material: {:.2}", current_weights.material_weight);
+            println!("PST: {:.2}", current_weights.pst_weight);
+            println!("Pawns: {:.2}", current_weights.pawn_structure_weight);
+            println!("Mobility: {:.2}", current_weights.mobility_weight);
+            println!("King Safety: {:.2}", current_weights.king_safety_weight);
+            println!("Threats: {:.2}", current_weights.threats_weight);
+            println!("Space: {:.2}", current_weights.space_weight);
+            println!("Imbalance: {:.2}", current_weights.imbalance_weight);
+            println!("Bishop Pair: {:.2}", current_weights.bishop_pair_weight);
+            println!("Passed Pawn: {:.2}", current_weights.passed_pawn_weight);
+            println!("Tempo: {:.2}", current_weights.tempo_bonus_weight);
+            println!();
+            
             crate::eval::evaluate::print_evaluation(&pos);
+            
             let moves = generate_legal_moves(&pos);
-    let mut counter = 0;
-    for move1 in moves{
-        counter += 1;
-        println!("Move: {:?}",move_to_uci(move1));
-    }
-    println!("Move Count: {:?}",counter);
+            let mut counter = 0;
+            for move1 in moves{
+                counter += 1;
+                println!("Move: {:?}",move_to_uci(move1));
+            }
+            println!("Move Count: {:?}",counter);
         }
     }
 

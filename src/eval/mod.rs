@@ -9,6 +9,8 @@ pub mod imbalance;
 pub mod threats;
 pub mod eval_util;
 pub mod evaluate;
+pub mod weights;
+pub mod initiative;
 
 pub use evaluate::{Score, EvalResult, evaluate, evaluate_fast, evaluate_detailed, MATE_VALUE, DRAW_VALUE};
 pub use eval_util::{EvalCache, phase_value, is_endgame, is_middlegame};

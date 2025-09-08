@@ -32,6 +32,11 @@ pub fn evaluate_space(pos: &Position) -> Score {
     score
 }
 
+// Public wrapper for per-color space evaluation
+pub fn evaluate_space_for_color(pos: &Position, color: Color) -> Score {
+    calculate_space_for_color(pos, color)
+}
+
 fn calculate_space_for_color(pos: &Position, color: Color) -> Score {
     let mut space_score = Score::zero();
     

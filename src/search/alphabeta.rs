@@ -272,25 +272,22 @@ fn find_least_attacker(pos: &Position, attackers: u64, color: Color) -> (u8, i32
 fn update_xray_attackers(pos: &Position, target: u8, mut occupied: u64, removed_square: u8) -> u64 {
     let (removed_piece, _) = pos.piece_at(removed_square);
     
-    // X-ray saldırganları bul
     match removed_piece {
         PieceType::Bishop | PieceType::Queen => {
-            // Removed square'den target'a doğru yönü bul
             let direction = get_line_direction(removed_square, target);
-            if direction.0 != 0 || direction.1 != 0 { // Diagonal
+            if direction.0 != 0 || direction.1 != 0 {
                 let behind_attackers = get_xray_attackers_on_line(pos, removed_square, target, occupied, true);
                 occupied |= behind_attackers;
             }
         }
         PieceType::Rook => {
             let direction = get_line_direction(removed_square, target);
-            if (direction.0 == 0) != (direction.1 == 0) { // Straight line
+            if (direction.0 == 0) != (direction.1 == 0) {
                 let behind_attackers = get_xray_attackers_on_line(pos, removed_square, target, occupied, false);
                 occupied |= behind_attackers;
             }
         }
         PieceType::Queen if removed_piece == PieceType::Queen => {
-            // Queen için hem diagonal hem straight kontrol et
             let behind_diagonal = get_bishop_attacks(target, occupied) & 
                 (pos.pieces_of_type(PieceType::Bishop) | pos.pieces_of_type(PieceType::Queen));
             let behind_straight = get_rook_attacks(target, occupied) & 
@@ -303,7 +300,6 @@ fn update_xray_attackers(pos: &Position, target: u8, mut occupied: u64, removed_
     occupied
 }
 
-// Yardımcı fonksiyon ekle
 fn get_xray_attackers_on_line(pos: &Position, from: u8, to: u8, occupied: u64, is_diagonal: bool) -> u64 {
     let mut result = 0u64;
     let direction = get_line_direction(from, to);
@@ -601,10 +597,10 @@ impl SearchContext {
             if entry.static_eval.abs() < MATE_SCORE {
                 entry.static_eval
             } else {
-                evaluate(pos).score
+                evaluate_int(pos)
             }
         } else {
-            evaluate(pos).score
+            evaluate_int(pos)
         };
         
         let improving = !in_check && ply >= 2 && 
@@ -1312,8 +1308,6 @@ impl ParallelSearch {
     fn send_uci_info(&self, depth: i32, score: i32, nodes: u64, time_ms: u64, nps: u64, pv: &[Move], currmovenumber: u32) {
         let score_str = if score.abs() >= MATE_SCORE {
         let mut mate_in = (MATE_VALUE - score.abs() + 1) / 2;
-        // Adjust for ply count to show correct mate distance
-        //mate_in = (mate_in + 1) / 2; // Convert from plies to moves
         format!("mate {}", if score > 0 { mate_in } else { -mate_in })
     } else {
         format!("cp {}", score)
